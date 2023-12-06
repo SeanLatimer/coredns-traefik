@@ -1,6 +1,7 @@
 package traefik
 
 import (
+	"net"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -18,10 +19,11 @@ const defaultTtl uint32 = 30
 const defaultRefreshInterval uint32 = 30
 
 func init() {
-	caddy.RegisterPlugin("traefik", caddy.Plugin{
-		ServerType: "dns",
-		Action:     setup,
-	})
+	// caddy.RegisterPlugin("traefik", caddy.Plugin{
+	// 	ServerType: "dns",
+	// 	Action:     setup,
+	// })
+	plugin.Register("traefik", setup)
 }
 
 func createPlugin(c *caddy.Controller) (*Traefik, error) {
@@ -62,7 +64,16 @@ func createPlugin(c *caddy.Controller) (*Traefik, error) {
 
 		for c.NextBlock() {
 			var value = c.Val()
+			println(value)
 			switch value {
+			case "a":
+				if !c.NextArg() {
+					return traefik, c.ArgErr()
+				}
+				cfg.a = net.ParseIP(c.Val())
+				if cfg.a == nil {
+					return traefik, c.Errf("invalid IP address: '%s'", c.Val())
+				}
 			case "cname":
 				if !c.NextArg() {
 					return traefik, c.ArgErr()

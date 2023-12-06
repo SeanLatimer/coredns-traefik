@@ -2,6 +2,7 @@ package traefik
 
 import (
 	"context"
+	"net"
 	"net/url"
 	"regexp"
 	"strings"
@@ -27,6 +28,7 @@ type TraefikConfigEntryMap map[string]*TraefikConfigEntry
 
 type TraefikConfig struct {
 	baseUrl         *url.URL
+	a               net.IP
 	cname           string
 	ttl             uint32
 	refreshInterval uint32
@@ -58,14 +60,23 @@ func (t *Traefik) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 	m.SetReply(r)
 	m.Authoritative = true
 
-	hdr := dns.RR_Header{Name: state.QName(), Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: t.Config.ttl}
+	rtype := dns.TypeCNAME
+	if t.Config.a != nil {
+		rtype = dns.TypeA
+	}
+
+	hdr := dns.RR_Header{Name: state.QName(), Rrtype: rtype, Class: dns.ClassINET, Ttl: t.Config.ttl}
 
 	for _, q := range state.Req.Question {
 		find := strings.ToLower(q.Name[:len(q.Name)-1])
-
 		result := t.getEntry(find)
 		if result != nil {
-			m.Answer = []dns.RR{&dns.CNAME{Hdr: hdr, Target: t.Config.cname + "."}}
+			if t.Config.a != nil {
+				m.Answer = []dns.RR{&dns.A{Hdr: hdr, A: t.Config.a}}
+			} else {
+				m.Answer = []dns.RR{&dns.CNAME{Hdr: hdr, Target: t.Config.cname}}
+			}
+			println(m.String())
 			w.WriteMsg(m)
 
 			return dns.RcodeSuccess, nil
@@ -126,7 +137,13 @@ func (t *Traefik) refresh() error {
 				if host != t.Config.cname {
 					_, exists := t.mappings[host]
 					if !exists {
-						log.Infof("+ %s -> %s", host, t.Config.cname)
+						var target string
+						if t.Config.a != nil {
+							target = t.Config.a.String()
+						} else {
+							target = t.Config.cname
+						}
+						log.Infof("+ %s -> %s", host, target)
 						t.mappings[host] = &TraefikConfigEntry{
 							cname: t.Config.cname,
 							ttl:   t.Config.ttl,
@@ -142,7 +159,13 @@ func (t *Traefik) refresh() error {
 	for cachedHost := range t.mappings {
 		_, stillExists := fromTraefik[cachedHost]
 		if !stillExists {
-			log.Infof("- %s -> %s", cachedHost, t.Config.cname)
+			var target string
+			if t.Config.a != nil {
+				target = t.Config.a.String()
+			} else {
+				target = t.Config.cname
+			}
+			log.Infof("- %s -> %s", cachedHost, target)
 			toDelete[cachedHost] = struct{}{}
 			deletes += 1
 		}
@@ -159,7 +182,7 @@ func (t *Traefik) refresh() error {
 	} else if deletes > 0 {
 		log.Infof("Deleted %d entries", deletes)
 	} else {
-		log.Infof("No changes detected")
+		log.Debug("No changes detected")
 	}
 
 	t.ready = true
