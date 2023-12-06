@@ -64,7 +64,6 @@ func createPlugin(c *caddy.Controller) (*Traefik, error) {
 
 		for c.NextBlock() {
 			var value = c.Val()
-			println(value)
 			switch value {
 			case "a":
 				if !c.NextArg() {
