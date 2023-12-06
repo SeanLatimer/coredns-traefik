@@ -76,7 +76,6 @@ func (t *Traefik) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Msg
 			} else {
 				m.Answer = []dns.RR{&dns.CNAME{Hdr: hdr, Target: t.Config.cname}}
 			}
-			println(m.String())
 			w.WriteMsg(m)
 
 			return dns.RcodeSuccess, nil
